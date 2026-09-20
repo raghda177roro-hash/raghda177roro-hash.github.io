@@ -1,39 +1,165 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>الوسيلة التعليمية</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #000;
-        }
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: block;
-        }
-    </style>
-</head>
-<body>
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Volume2, VolumeX } from "lucide-react";
+import Backdrop from "./components/Backdrop";
+import Home, { type Screen } from "./components/Home";
+import StoryBook from "./components/StoryBook";
+import LinguisticGame from "./components/LinguisticGame";
+import QuizGame from "./components/QuizGame";
+import TrueFalseGame from "./components/TrueFalseGame";
+import BlankGame from "./components/BlankGame";
+import MemoryGame from "./components/MemoryGame";
+import CertificateScreen from "./components/CertificateScreen";
+import { PALETTES, StarsPill, type PaletteKey } from "./components/ui";
+import { isMuted, setMuted, sfx, stopSpeak } from "./lib/sound";
+import { teacher } from "./data/content";
 
-    <!-- تم تضمين الرابط ليفتح بكامل الشاشة دون إظهار عنوان الموقع الأصلي -->
-    <iframe 
-        src="https://01a0bba7-56ec-7829-bd07-749ce88b6b00.arena.site" 
-        allowfullscreen="true" 
-        webkitallowfullscreen="true" 
-        mozallowfullscreen="true"
-        allow="autoplay; fullscreen">
-    </iframe>
+const STORAGE_KEY = "fadal-limuallimati-stars-v1";
 
-</body>
-</html>
+const screenMeta: Record<Exclude<Screen, "home">, { title: string; palette: PaletteKey }> = {
+  story: { title: "نافذة القراءة", palette: "violet" },
+  linguistic: { title: "القضايا اللغوية", palette: "rose" },
+  quiz: { title: "أسئلة الفهم", palette: "pink" },
+  truefalse: { title: "صح أم خطأ", palette: "teal" },
+  blank: { title: "أكمل الجملة", palette: "amber" },
+  memory: { title: "بطاقات الذاكرة", palette: "sky" },
+  certificate: { title: "شهادة القراءة", palette: "fuchsia" },
+};
+
+function loadStars(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+export default function App() {
+  const [screen, setScreen] = useState<Screen>("home");
+  const [best, setBest] = useState<Record<string, number>>(loadStars);
+  const [muted, setMutedUI] = useState(isMuted());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(best));
+    } catch {
+      /* تجاهل */
+    }
+  }, [best]);
+
+  const total = Object.entries(best)
+    .filter(([k]) => k !== "read")
+    .reduce((a, [, b]) => a + b, 0);
+  const readDone = (best["read"] ?? 0) > 0;
+
+  const go = (s: Screen) => {
+    stopSpeak();
+    sfx.click();
+    setScreen(s);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const complete = (game: string, score: number) => {
+    setBest((prev) => ({ ...prev, [game]: Math.max(prev[game] ?? 0, score) }));
+  };
+
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    setMutedUI(next);
+    if (!next) sfx.click();
+  };
+
+  const meta = screen !== "home" ? screenMeta[screen] : null;
+  const pal = meta ? PALETTES[meta.palette] : PALETTES.violet;
+
+  return (
+    <div className="min-h-screen font-body text-slate-800">
+      <Backdrop />
+
+      {/* الشريط العلوي داخل النوافذ */}
+      <AnimatePresence>
+        {meta && (
+          <motion.header
+            initial={{ y: -80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -80, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 240, damping: 22 }}
+            className="sticky top-3 z-40 mx-auto mt-3 flex max-w-4xl items-center justify-between gap-2 rounded-full border-4 border-white bg-white/85 px-3 py-2 shadow-xl shadow-sky-200/60 backdrop-blur sm:px-4"
+          >
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.93 }}
+              onClick={() => go("home")}
+              className={`flex cursor-pointer items-center gap-1.5 rounded-full px-4 py-2 font-display text-lg font-bold text-white ${pal.solid} ${pal.edge} ${pal.edgePress} active:translate-y-[5px]`}
+            >
+              <ArrowRight className="h-5 w-5" />
+              <span className="hidden sm:inline">القائمة</span>
+            </motion.button>
+
+            <div className="flex items-center gap-2">
+              <div className="hidden overflow-hidden rounded-full border-2 border-pink-200 shadow md:block">
+                <img src={teacher.image} alt={teacher.name} className="h-9 w-9 object-cover" />
+              </div>
+              <h2 className={`font-display text-xl font-extrabold ${pal.solidText} sm:text-2xl`}>{meta.title}</h2>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={toggleMute}
+                aria-label={muted ? "تشغيل الصوت" : "كتم الصوت"}
+                className="grid h-11 w-11 cursor-pointer place-items-center rounded-full border-4 border-white bg-gradient-to-br from-amber-300 to-amber-400 text-amber-900 shadow-md"
+              >
+                {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              </motion.button>
+              <StarsPill count={total} />
+            </div>
+          </motion.header>
+        )}
+      </AnimatePresence>
+
+      {/* محتوى الشاشات */}
+      <main className="relative z-10">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={screen}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -24 }}
+            transition={{ duration: 0.28, ease: "easeOut" }}
+          >
+            {screen === "home" && <Home onNavigate={go} best={best} total={total} readDone={readDone} />}
+            {screen !== "home" && (
+              <div className="mx-auto max-w-5xl px-4 pt-6 pb-16 sm:pt-8">
+                {screen === "story" && (
+                  <StoryBook
+                    onExit={() => go("home")}
+                    onFinish={() => complete("read", 1)}
+                    onCertificate={() => go("certificate")}
+                  />
+                )}
+                {screen === "linguistic" && (
+                  <LinguisticGame onExit={() => go("home")} onComplete={(s) => complete("linguistic", s)} />
+                )}
+                {screen === "quiz" && <QuizGame onExit={() => go("home")} onComplete={(s) => complete("quiz", s)} />}
+                {screen === "truefalse" && <TrueFalseGame onExit={() => go("home")} onComplete={(s) => complete("truefalse", s)} />}
+                {screen === "blank" && <BlankGame onExit={() => go("home")} onComplete={(s) => complete("blank", s)} />}
+                {screen === "memory" && <MemoryGame onExit={() => go("home")} onComplete={(s) => complete("memory", s)} />}
+                {screen === "certificate" && (
+                  <CertificateScreen
+                    unlocked={readDone}
+                    totalStars={total}
+                    onExit={() => go("home")}
+                    onGoStory={() => go("story")}
+                  />
+                )}
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
